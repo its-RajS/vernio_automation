@@ -1,9 +1,16 @@
 import OpenAI from "openai";
 import type { AIOutput } from "@/types/database";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let client: OpenAI | null = null;
+
+function getClient(): OpenAI {
+  if (!client) {
+    client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return client;
+}
 
 const SYSTEM_PROMPT = `You are a creative content strategist. Transform raw content into structured creative assets for social media.
 
@@ -37,7 +44,7 @@ Template: ${params.template}
 Content:
 ${params.content}`;
 
-  const response = await client.responses.create({
+  const response = await getClient().responses.create({
     model: "gpt-5-mini",
     input: [
       { role: "system", content: SYSTEM_PROMPT },
