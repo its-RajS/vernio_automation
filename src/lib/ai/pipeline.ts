@@ -43,6 +43,7 @@ export async function runGenerationPipeline(projectId: string) {
       .from("assets")
       .select("*")
       .eq("project_id", projectId);
+    const assetErrors: string[] = [];
 
     if (assets) {
       for (const asset of assets as Asset[]) {
@@ -50,9 +51,13 @@ export async function runGenerationPipeline(projectId: string) {
           const text = await extractTextFromAsset(asset.storage_path);
           if (text.trim()) {
             textParts.push(`--- From file: ${asset.file_name} ---\n${text.trim()}`);
+          } else {
+            assetErrors.push(`${asset.file_name}: no readable text found`);
           }
-        } catch {
-          // Skip files that can't be parsed
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unknown extraction error";
+          assetErrors.push(`${asset.file_name}: ${message}`);
         }
       }
     }
@@ -60,6 +65,11 @@ export async function runGenerationPipeline(projectId: string) {
     const combinedContent = textParts.join("\n\n");
 
     if (!combinedContent.trim()) {
+      if (assetErrors.length > 0) {
+        throw new Error(
+          `No content available to generate from. ${assetErrors.join("; ")}`
+        );
+      }
       throw new Error("No content available to generate from");
     }
 
@@ -69,6 +79,10 @@ export async function runGenerationPipeline(projectId: string) {
       platform: p.platform,
       dimension: p.dimension,
       template: p.template_id,
+      brandName: p.brand_name,
+      primaryColor: p.primary_color,
+      secondaryColor: p.secondary_color,
+      brandPrompt: p.brand_prompt,
     });
 
     // 6. Save creative set

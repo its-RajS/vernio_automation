@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import type { ProjectInsert, AssetInsert } from "@/types/database";
 import { redirect } from "next/navigation";
 import { runGenerationPipeline } from "@/lib/ai/pipeline";
@@ -11,6 +12,10 @@ export async function createProject(data: {
   dimension: string;
   template_id: string;
   content_text: string | null;
+  brand_name?: string | null;
+  primary_color?: string | null;
+  secondary_color?: string | null;
+  brand_prompt?: string | null;
   resolution?: string;
   creative_count?: number;
 }) {
@@ -31,6 +36,10 @@ export async function createProject(data: {
     dimension: data.dimension as ProjectInsert["dimension"],
     template_id: data.template_id,
     content_text: data.content_text,
+    brand_name: data.brand_name?.trim() || null,
+    primary_color: data.primary_color || "#8B5CF6",
+    secondary_color: data.secondary_color || "#2563EB",
+    brand_prompt: data.brand_prompt?.trim() || null,
     resolution: data.resolution || "1080p",
     creative_count: data.creative_count || 1,
     status: "draft",
@@ -115,21 +124,28 @@ export async function uploadProjectAsset(
     return { error: "No file provided" };
   }
 
-  // Validate file type
-  const allowedTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
-  if (!allowedTypes.includes(file.type)) {
-    return { error: "Invalid file type. Only PDF and DOCX files are allowed." };
+  const fileExt = file.name.split(".").pop()?.toLowerCase();
+  const allowedExtensions = ["pdf", "doc", "docx", "txt"];
+  if (!fileExt || !allowedExtensions.includes(fileExt)) {
+    return { error: "Invalid file extension. Only .pdf, .doc, .docx, and .txt are allowed." };
+  }
+
+  const allowedTypes = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+    "application/octet-stream",
+    "",
+  ]);
+  if (!allowedTypes.has(file.type)) {
+    return { error: "Invalid file type. Only PDF, DOC, DOCX, and TXT files are allowed." };
   }
 
   // Validate file size (10MB max)
   const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) {
     return { error: "File too large. Maximum size is 10MB." };
-  }
-
-  const fileExt = file.name.split(".").pop()?.toLowerCase();
-  if (!fileExt || !["pdf", "docx"].includes(fileExt)) {
-    return { error: "Invalid file extension. Only .pdf and .docx are allowed." };
   }
 
   const fileName = `${Date.now()}.${fileExt}`;
@@ -292,6 +308,10 @@ export async function updateProject(id: string, data: {
   dimension?: string;
   template_id?: string;
   content_text?: string | null;
+  brand_name?: string | null;
+  primary_color?: string | null;
+  secondary_color?: string | null;
+  brand_prompt?: string | null;
   status?: string;
 }) {
   const supabase = await createClient();
@@ -332,6 +352,14 @@ export async function updateProject(id: string, data: {
   if (data.content_text !== undefined) {
     updateData.content_text = data.content_text ? sanitizeString(data.content_text) : null;
   }
+  if (data.brand_name !== undefined) {
+    updateData.brand_name = data.brand_name ? sanitizeString(data.brand_name) : null;
+  }
+  if (data.primary_color !== undefined) updateData.primary_color = data.primary_color;
+  if (data.secondary_color !== undefined) updateData.secondary_color = data.secondary_color;
+  if (data.brand_prompt !== undefined) {
+    updateData.brand_prompt = data.brand_prompt ? sanitizeString(data.brand_prompt) : null;
+  }
   if (data.status !== undefined) updateData.status = data.status;
 
   const { data: project, error } = await supabase
@@ -370,6 +398,16 @@ export async function getBrandProfiles() {
   }
 
   return { data, error: null };
+}
+
+export async function getDefaultBrandProfile() {
+  const { data, error } = await getBrandProfiles();
+
+  if (error || !data || data.length === 0) {
+    return { data: null, error };
+  }
+
+  return { data: data[0], error: null };
 }
 
 export async function createBrandProfile(data: {
@@ -481,6 +519,50 @@ export async function deleteProject(id: string) {
 
   redirect("/dashboard");
 }
+export async function getProjectAnalysis(campaignId: string) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("campaign_analysis")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message, data: null };
+  }
+
+  return { data, error: null };
+}
+
+export async function getCreativesWithAssets(campaignId: string) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("campaign_creatives")
+    .select("*, creative_prompts(*), creative_assets(*)")
+    .eq("campaign_id", campaignId)
+    .order("creative_number", { ascending: true });
+
+  if (error) return { error: error.message, data: null };
+
+  // Generate signed URLs (1h TTL) for completed assets
+  const enriched = await Promise.all(
+    (data ?? []).map(async (creative) => {
+      const asset = (creative.creative_assets as any[])?.[0];
+      if (!asset || asset.status !== "completed" || !asset.image_url) {
+        return { ...creative, signedImageUrl: null };
+      }
+      const { data: signed } = await supabase.storage
+        .from("project-assets")
+        .createSignedUrl(asset.image_url as string, 3600);
+      return { ...creative, signedImageUrl: signed?.signedUrl ?? null };
+    })
+  );
+
+  return { data: enriched, error: null };
+}
+
 function sanitizeString(content_text: string | null): any {
   if (!content_text) {
     return "";
@@ -488,4 +570,3 @@ function sanitizeString(content_text: string | null): any {
   const regex = /^[\x00-\x1F\x7F-\x9F\uFFFE\uFFFF]/;
   return content_text.replace(regex, "");
 }
-

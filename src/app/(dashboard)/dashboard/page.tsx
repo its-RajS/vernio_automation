@@ -17,9 +17,7 @@ import {
   Clock,
   CheckCircle2,
   ArrowRight,
-  Sparkles,
   Layers,
-  AlertCircle,
   Plus,
 } from "lucide-react";
 import type { Project } from "@/types/database";
@@ -131,7 +129,7 @@ function ActivityItem({
   projectName,
   time,
 }: {
-  icon: typeof Sparkles;
+  icon: typeof Clock;
   label: string;
   projectName: string;
   time: string;
@@ -192,8 +190,8 @@ export default async function DashboardPage() {
       .filter((p) => p.status === "processing")
       .slice(0, 2)
       .map((p) => ({
-        icon: Sparkles,
-        label: "AI generating slides for:",
+        icon: Clock,
+        label: "Processing:",
         projectName: p.name,
         time: formatRelativeDate(p.updated_at),
       })),

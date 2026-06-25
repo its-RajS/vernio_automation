@@ -44,7 +44,9 @@ function getFileIcon(fileType: string) {
 const FILE_TYPE_FILTERS = [
   { label: "All", value: "all" },
   { label: "PDF", value: "pdf" },
+  { label: "DOC", value: "doc" },
   { label: "DOCX", value: "docx" },
+  { label: "TXT", value: "txt" },
   { label: "Images", value: "image" },
 ];
 

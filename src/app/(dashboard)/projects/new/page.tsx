@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { createProject, uploadProjectAsset } from "../../actions";
+import { createProject, getDefaultBrandProfile, uploadProjectAsset } from "../../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { PLATFORMS, DIMENSIONS, TEMPLATES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { detectStructure } from "@/modules/content-processing/content-structure-detector.service";
 import {
   Upload,
   FileText,
@@ -48,6 +49,11 @@ interface PipelineStep {
   status: "pending" | "processing" | "completed" | "failed";
 }
 
+interface ToastState {
+  title: string;
+  description: string;
+}
+
 export default function NewProjectPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +75,7 @@ export default function NewProjectPage() {
   const [primaryColor, setPrimaryColor] = useState("#8B5CF6");
   const [secondaryColor, setSecondaryColor] = useState("#2563EB");
   const [brandPrompt, setBrandPrompt] = useState("");
+  const [loadingBrandDefaults, setLoadingBrandDefaults] = useState(true);
 
   // Step 4 — Output
   const [templateId, setTemplateId] = useState("");
@@ -86,6 +93,7 @@ export default function NewProjectPage() {
   ]);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   // Project name — auto-generated from brand or content
   const projectName =
@@ -94,6 +102,19 @@ export default function NewProjectPage() {
       ? contentText.trim().split("\n")[0].slice(0, 50)
       : "") ||
     "Untitled Campaign";
+
+  const detectedStructure = useMemo(() => {
+    if (contentSource !== "paste" || !contentText.trim()) {
+      return null;
+    }
+
+    return detectStructure(contentText);
+  }, [contentSource, contentText]);
+
+  const hasPinnedCreativeCount = !!detectedStructure?.hasStructure;
+  const effectiveCreativeCount = hasPinnedCreativeCount
+    ? detectedStructure.count
+    : creativeCount;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files) {
@@ -142,8 +163,40 @@ export default function NewProjectPage() {
     }
   }
 
+  function showErrorToast(title: string, description: string) {
+    setToast({ title, description });
+  }
+
+  useEffect(() => {
+    async function loadBrandDefaults() {
+      const { data } = await getDefaultBrandProfile();
+      if (data) {
+        setBrandName(data.name || "");
+        setPrimaryColor(data.primary_color || "#8B5CF6");
+        setSecondaryColor(data.secondary_color || "#2563EB");
+        setBrandPrompt(data.brand_prompt || "");
+      }
+      setLoadingBrandDefaults(false);
+    }
+
+    loadBrandDefaults();
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setToast(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
   async function handleGenerate() {
     setError(null);
+    setToast(null);
     setGenerating(true);
     goToStep(6);
 
@@ -169,8 +222,12 @@ export default function NewProjectPage() {
         dimension,
         template_id: templateId,
         content_text: contentSource === "paste" ? contentText.trim() || null : null,
+        brand_name: brandName.trim() || null,
+        primary_color: primaryColor,
+        secondary_color: secondaryColor,
+        brand_prompt: brandPrompt.trim() || null,
         resolution,
-        creative_count: creativeCount,
+        creative_count: effectiveCreativeCount,
       });
 
       if (result.error) {
@@ -200,24 +257,66 @@ export default function NewProjectPage() {
         updateStep(1, "completed");
       }
 
-      // Remaining pipeline steps are handled by the server
+      // Step 3: Analyze content
       updateStep(2, "processing");
-      await delay(800);
+      try {
+        const analyzeRes = await fetch(`/api/campaigns/${projectId}/analyze`, {
+          method: "POST",
+        });
+        if (!analyzeRes.ok) {
+          const analysisErrorText = await analyzeRes.text();
+          console.error("Content analysis failed:", analysisErrorText);
+
+          let analysisErrorMessage = "Content analysis failed.";
+          try {
+            const parsed = JSON.parse(analysisErrorText) as { error?: string };
+            if (parsed.error) {
+              analysisErrorMessage = parsed.error;
+            }
+          } catch {
+            if (analysisErrorText.trim()) {
+              analysisErrorMessage = analysisErrorText.trim();
+            }
+          }
+
+          updateStep(2, "failed");
+          setGenerating(false);
+          setError(analysisErrorMessage);
+          showErrorToast("Content analysis failed", analysisErrorMessage);
+          return;
+        }
+      } catch (analyzeErr) {
+        console.error("Content analysis error:", analyzeErr);
+        const analysisErrorMessage =
+          analyzeErr instanceof Error
+            ? analyzeErr.message
+            : "Unexpected error during content analysis.";
+
+        updateStep(2, "failed");
+        setGenerating(false);
+        setError(analysisErrorMessage);
+        showErrorToast("Content analysis failed", analysisErrorMessage);
+        return;
+      }
       updateStep(2, "completed");
 
       updateStep(3, "processing");
-      await delay(1000);
+      await delay(400);
       updateStep(3, "completed");
 
       updateStep(4, "processing");
-      await delay(600);
+      await delay(300);
       updateStep(4, "completed");
 
       // Redirect to project detail
-      await delay(500);
+      await delay(400);
       router.push(`/projects/${projectId}`);
     } catch (err) {
       setError(
+        err instanceof Error ? err.message : "An unexpected error occurred."
+      );
+      showErrorToast(
+        "Campaign creation failed",
         err instanceof Error ? err.message : "An unexpected error occurred."
       );
       updateStep(0, "failed");
@@ -280,6 +379,27 @@ export default function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      {toast && (
+        <div className="fixed right-4 top-4 z-50 w-full max-w-sm rounded-xl border border-red-500/20 bg-background/95 p-4 shadow-lg backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">{toast.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground break-words">
+                {toast.description}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Dismiss notification"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Title */}
       <div className="mb-8 text-center">
         <h1 className="text-[28px] font-semibold tracking-tight text-foreground">
@@ -319,7 +439,7 @@ export default function NewProjectPage() {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { value: "upload", label: "Upload File", icon: Upload, desc: "PDF or DOCX" },
+                  { value: "upload", label: "Upload File", icon: Upload, desc: "PDF, DOC, DOCX, or TXT" },
                   { value: "paste", label: "Paste Content", icon: FileText, desc: "Write or paste text" },
                 ].map((opt) => (
                   <button
@@ -379,13 +499,13 @@ export default function NewProjectPage() {
                       Click to upload
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      PDF or DOCX files
+                      PDF, DOC, DOCX, or TXT files
                     </p>
                     <Input
                       id="file-upload"
                       ref={fileInputRef}
                       type="file"
-                      accept=".docx,.pdf"
+                      accept=".doc,.docx,.pdf,.txt"
                       multiple
                       onChange={handleFileChange}
                       className="hidden"
@@ -489,7 +609,7 @@ export default function NewProjectPage() {
           {step === 3 && (
             <div className="space-y-5">
               <p className="text-sm text-muted-foreground">
-                Configure your brand identity for the creatives.
+                Configure your brand identity for the creatives. Defaults come from Settings and can be adjusted for this campaign.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="brand-name">Brand name</Label>
@@ -497,7 +617,7 @@ export default function NewProjectPage() {
                   id="brand-name"
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
-                  placeholder="Acme Inc."
+                  placeholder={loadingBrandDefaults ? "Loading brand defaults..." : "Acme Inc."}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -631,31 +751,61 @@ export default function NewProjectPage() {
 
               {/* Creative Count */}
               <div className="space-y-2">
-                <Label>Number of creatives</Label>
+                <Label>Creative count</Label>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setCreativeCount(Math.max(1, creativeCount - 1))}
-                    disabled={creativeCount <= 1}
+                    disabled={hasPinnedCreativeCount || creativeCount <= 1}
                     className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-border/80 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     −
                   </button>
                   <div className="flex h-9 min-w-[3rem] items-center justify-center rounded-lg border border-border bg-card px-3 text-sm font-medium text-foreground">
-                    {creativeCount}
+                    {effectiveCreativeCount}
                   </div>
                   <button
                     type="button"
                     onClick={() => setCreativeCount(Math.min(20, creativeCount + 1))}
-                    disabled={creativeCount >= 20}
+                    disabled={hasPinnedCreativeCount || creativeCount >= 20}
                     className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-border/80 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
-                  <span className="text-xs text-muted-foreground ml-2">
-                    (1-20 creatives)
-                  </span>
                 </div>
+                {hasPinnedCreativeCount ? (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+                    Creative count is pinned from detected {detectedStructure?.pattern} headings in the content: {effectiveCreativeCount} {effectiveCreativeCount === 1 ? "unit" : "units"}.
+                  </div>
+                ) : contentSource === "upload" ? (
+                  <p className="text-xs text-muted-foreground">
+                    If the uploaded document contains headings like Slide 1:, Page 1:, Creative 1:, Section 1:, or Post 1:, that structure will pin the final creative count during analysis.
+                  </p>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Manual count is used only when no structured headings are detected.
+                  </span>
+                )}
+                {hasPinnedCreativeCount && detectedStructure && (
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-xs font-medium text-foreground">Detected content structure</p>
+                    <div className="mt-2 space-y-1.5">
+                      {detectedStructure.slides.map((slide) => (
+                        <div
+                          key={slide.slide_number}
+                          className="flex items-center justify-between gap-3 text-xs"
+                        >
+                          <span className="text-muted-foreground">
+                            {detectedStructure.pattern} {slide.slide_number}
+                          </span>
+                          <span className="truncate text-foreground">
+                            {slide.title || "Untitled"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -682,7 +832,11 @@ export default function NewProjectPage() {
                 />
                 <ReviewItem
                   label="Creatives"
-                  value={`${creativeCount} ${creativeCount === 1 ? "creative" : "creatives"}`}
+                  value={
+                    hasPinnedCreativeCount
+                      ? `${effectiveCreativeCount} ${effectiveCreativeCount === 1 ? "creative" : "creatives"} from content headings`
+                      : `${effectiveCreativeCount} ${effectiveCreativeCount === 1 ? "creative" : "creatives"}`
+                  }
                 />
                 <ReviewItem label="Template" value={TEMPLATES.find((t) => t.id === templateId)?.name ?? templateId} />
                 {brandName && <ReviewItem label="Brand" value={brandName} />}

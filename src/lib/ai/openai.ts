@@ -14,7 +14,7 @@ function getClient(): OpenAI {
 
 const SYSTEM_PROMPT = `You are a creative content strategist. Transform raw content into structured creative assets for social media.
 
-Given the user's content, target platform, dimensions, and template preference, you must:
+Given the user's content, target platform, dimensions, template preference, and brand context, you must:
 1. Analyze the content to understand its core message and audience
 2. Generate a document title, subtitle, and summary
 3. Determine the creative count and creative type — choose from: single_post, multi_post, carousel
@@ -36,10 +36,18 @@ export async function generateCreativeStructure(params: {
   platform: string;
   dimension: string;
   template: string;
+  brandName?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  brandPrompt?: string | null;
 }): Promise<AIOutput> {
   const userPrompt = `Platform: ${params.platform}
 Dimension: ${params.dimension}
 Template: ${params.template}
+Brand name: ${params.brandName || "Not specified"}
+Primary color: ${params.primaryColor || "Not specified"}
+Secondary color: ${params.secondaryColor || "Not specified"}
+Brand prompt: ${params.brandPrompt || "Not specified"}
 
 Content:
 ${params.content}`;

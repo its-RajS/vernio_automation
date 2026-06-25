@@ -4,50 +4,107 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { TEMPLATES } from "@/lib/constants";
-import { LayoutTemplate, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
+// Visual thumbnail showing text zone (dark) vs image zone (lighter)
 function TemplatePreview({ type }: { type: string }) {
+  const base = "w-full h-full rounded overflow-hidden bg-secondary flex";
+
   switch (type) {
-    case "left-hero":
+    case "editorial-left":
       return (
-        <div className="w-full h-full flex items-center justify-center p-4">
-          <div className="w-full max-w-[200px] space-y-2">
-            <div className="h-3 bg-primary/20 rounded w-3/4" />
-            <div className="h-2 bg-muted rounded w-full" />
-            <div className="h-2 bg-muted rounded w-5/6" />
+        <div className={base}>
+          <div className="w-[40%] h-full bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium rotate-0">TEXT</span>
+          </div>
+          <div className="flex-1 h-full bg-primary/10" />
+        </div>
+      );
+    case "editorial-right":
+      return (
+        <div className={base}>
+          <div className="flex-1 h-full bg-primary/10" />
+          <div className="w-[40%] h-full bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
           </div>
         </div>
       );
-    case "centered":
+    case "top-title":
       return (
-        <div className="w-full h-full flex items-center justify-center p-4">
-          <div className="text-center space-y-2">
-            <div className="h-3 bg-primary/20 rounded w-24 mx-auto" />
-            <div className="h-2 bg-muted rounded w-32 mx-auto" />
+        <div className={`${base} flex-col`}>
+          <div className="w-full h-[32%] bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
+          </div>
+          <div className="flex-1 w-full bg-primary/10" />
+        </div>
+      );
+    case "bottom-caption":
+      return (
+        <div className={`${base} flex-col`}>
+          <div className="flex-1 w-full bg-primary/10" />
+          <div className="w-full h-[32%] bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
           </div>
         </div>
       );
-    case "minimal":
+    case "center-statement":
       return (
-        <div className="w-full h-full flex items-center justify-center p-4">
-          <div className="w-full max-w-[180px] space-y-3">
-            <div className="h-2 bg-muted rounded w-full" />
-            <div className="h-2 bg-muted rounded w-4/5" />
-            <div className="h-2 bg-primary/20 rounded w-2/3" />
+        <div className={`${base} flex-col`}>
+          <div className="h-[32%] w-full bg-primary/10" />
+          <div className="h-[36%] w-full bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
+          </div>
+          <div className="h-[32%] w-full bg-primary/10" />
+        </div>
+      );
+    case "story-top":
+      return (
+        <div className={`${base} flex-col`} style={{ aspectRatio: "9/16" }}>
+          <div className="w-full h-[35%] bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
+          </div>
+          <div className="flex-1 w-full bg-primary/10" />
+        </div>
+      );
+    case "story-bottom":
+      return (
+        <div className={`${base} flex-col`} style={{ aspectRatio: "9/16" }}>
+          <div className="flex-1 w-full bg-primary/10" />
+          <div className="w-full h-[35%] bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
           </div>
         </div>
       );
-    case "structured":
+    case "full-bleed-gradient":
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-4 space-y-2">
-          <div className="h-2 bg-primary/20 rounded w-3/4" />
-          <div className="h-1.5 bg-muted rounded w-full" />
-          <div className="h-1.5 bg-muted rounded w-5/6" />
-          <div className="h-1.5 bg-muted rounded w-4/5" />
+        <div className={`${base} flex-col relative`}>
+          <div className="flex-1 w-full bg-primary/10" />
+          <div className="w-full h-[38%] bg-gradient-to-t from-foreground/20 to-transparent flex items-end justify-center pb-1">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
+          </div>
+        </div>
+      );
+    case "poster-classic":
+      return (
+        <div className={`${base} flex-col`}>
+          <div className="h-[28%] w-full bg-primary/10" />
+          <div className="h-[44%] w-full bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium">TEXT</span>
+          </div>
+          <div className="h-[28%] w-full bg-primary/10" />
+        </div>
+      );
+    case "sidebar-bold":
+      return (
+        <div className={base}>
+          <div className="w-[35%] h-full bg-foreground/15 flex items-center justify-center">
+            <span className="text-[8px] text-muted-foreground font-medium rotate-0">TEXT</span>
+          </div>
+          <div className="flex-1 h-full bg-primary/10" />
         </div>
       );
     default:
-      return <LayoutTemplate className="h-10 w-10 text-primary/30" />;
+      return <div className="w-full h-full bg-primary/5 flex items-center justify-center text-[8px] text-muted-foreground">Preview</div>;
   }
 }
 
@@ -58,7 +115,7 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       <ShellHeader
         title="Templates"
-        description="Choose from professionally designed templates."
+        description="Professionally designed layouts. Dark zones show where text will render on top of the generated image."
       />
 
       {categories.map((category) => (
@@ -71,7 +128,7 @@ export default function TemplatesPage() {
               >
                 <CardContent className="p-5 space-y-4">
                   {/* Preview thumbnail */}
-                  <div className="flex items-center justify-center h-32 rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/10 overflow-hidden">
+                  <div className="flex items-center justify-center h-32 rounded-lg bg-card border border-border overflow-hidden p-2">
                     <TemplatePreview type={t.preview} />
                   </div>
 
@@ -89,18 +146,27 @@ export default function TemplatesPage() {
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-xs text-muted-foreground">
-                      All dimensions
+                  {/* Dimensions */}
+                  <div className="flex flex-wrap gap-1">
+                    {t.bestFor.map((d) => (
+                      <Badge key={d} variant="outline" className="text-[10px] bg-secondary text-muted-foreground">
+                        {d}
+                      </Badge>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-muted-foreground capitalize">
+                      {[...t.platforms].join(" · ")}
                     </span>
-                    <Link href={`/projects/new`}>
+                    <Link href="/projects/new">
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-8 gap-1.5 text-xs opacity-0 group-hover:opacity-100 transition-all"
                       >
                         <Plus className="h-3.5 w-3.5" />
-                        Use Template
+                        Use
                       </Button>
                     </Link>
                   </div>

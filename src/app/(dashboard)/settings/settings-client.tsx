@@ -172,15 +172,16 @@ export function SettingsClient({ user }: { user: User }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="brandPrompt">Brand Voice Prompt</Label>
+            <Label htmlFor="brandPrompt">Visual Style Prompt</Label>
             <textarea
               id="brandPrompt"
               value={brandPrompt}
               onChange={(e) => setBrandPrompt(e.target.value)}
-              placeholder="Describe your brand voice, tone, and style guidelines..."
+              placeholder="Render style, lighting, materials, mood — e.g. 'Ultra-realistic 3D glassmorphism. Cinematic lighting. Premium enterprise aesthetic.' Do NOT include layout, positioning, or composition instructions — those are controlled by the template."
               rows={4}
               className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             />
+            <p className="text-xs text-muted-foreground">Style and aesthetic only. Template controls all composition and layout — do not add positioning instructions here.</p>
           </div>
 
           <Button onClick={handleSave} disabled={saving}>
